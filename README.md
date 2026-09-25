@@ -1,4 +1,4 @@
-# MLOps End-to-End AWS Platform (`mlops_end_to_end_aws`)
+# MLOps End-to-End AWS Platform 
 
 An enterprise-grade, end-to-end MLOps platform built from scratch using Infrastructure as Code (Terraform), containerization (Docker), orchestration (Kubernetes), and experiment tracking/model registry (MLflow).
 
