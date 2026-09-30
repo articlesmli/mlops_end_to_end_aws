@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-server-deployment
+  labels:
+    app: ml-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-platform
+  template:
+    metadata:
+      labels:
+        app: ml-platform
+    spec:
+      containers:
+      - name: ml-container
+        image: nginx:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: MODEL_BUCKET_NAME
+          value: "ml-model-registry-store-2026"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-server-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: ml-platform
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080

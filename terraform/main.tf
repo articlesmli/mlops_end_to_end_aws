@@ -2,70 +2,93 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# 1. VPC and Subnets (Your network foundation)
+# ==========================================
+# 1. NETWORKING (Required for Kubernetes)
+# ==========================================
 resource "aws_vpc" "ml_vpc" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = {
-    Name = "ml-platform-vpc"
-  }
+  tags = { Name = "ml-eks-vpc" }
 }
 
-resource "aws_subnet" "public" {
-  vpc_id                  = aws_vpc.ml_vpc.id
-  cidr_block              = "10.0.1.0/24"
+# EKS requires at least 2 subnets in DIFFERENT Availability Zones
+resource "aws_subnet" "public_1" {
+  vpc_id            = aws_vpc.ml_vpc.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-east-1a"
   map_public_ip_on_launch = true
-  availability_zone       = "us-east-1a"
-
-  tags = {
-    Name = "ml-public-subnet"
-  }
+  tags              = { Name = "ml-public-1", "kubernetes.io/role/elb" = "1" }
 }
 
-resource "aws_subnet" "private" {
+resource "aws_subnet" "public_2" {
   vpc_id            = aws_vpc.ml_vpc.id
   cidr_block        = "10.0.2.0/24"
-  availability_zone = "us-east-1a"
+  availability_zone = "us-east-1b"
+  map_public_ip_on_launch = true
+  tags              = { Name = "ml-public-2", "kubernetes.io/role/elb" = "1" }
+}
 
-  tags = {
-    Name = "ml-private-subnet"
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.ml_vpc.id
+  tags   = { Name = "ml-igw" }
+}
+
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.ml_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
   }
 }
 
-# 2. S3 Bucket (Model Registry)
+resource "aws_route_table_association" "a1" {
+  subnet_id      = aws_subnet.public_1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "a2" {
+  subnet_id      = aws_subnet.public_2.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+# ==========================================
+# 2. S3 BUCKET (Model Registry)
+# ==========================================
 resource "aws_s3_bucket" "model_registry" {
   bucket        = "ml-model-registry-store-2026"
   force_destroy = false
-
-  tags = {
-    Name = "ml-model-registry"
-  }
 }
 
-resource "aws_s3_bucket_public_access_block" "block" {
-  bucket                  = aws_s3_bucket.model_registry.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+# ==========================================
+# 3. IAM ROLES (Permissions for Kubernetes)
+# ==========================================
+# Role for the EKS Cluster control plane
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "ml-eks-cluster-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "eks.amazonaws.com"
+        }
+      }
+    ]
+  })
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "encryption" {
-  bucket = aws_s3_bucket.model_registry.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.eks_cluster_role.name
 }
 
-# 3. IAM Role for ML Pipeline
-resource "aws_iam_role" "ml_execution_role" {
-  name = "ml-pipeline-execution-role"
-
+# Role for the worker nodes (the actual servers running your apps)
+resource "aws_iam_role" "eks_node_role" {
+  name = "ml-eks-node-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -80,84 +103,54 @@ resource "aws_iam_role" "ml_execution_role" {
   })
 }
 
-# 4. Security Group to allow SSH access
-resource "aws_security_group" "ml_sg" {
-  name        = "ml-server-sg"
-  description = "Allow SSH traffic"
-  vpc_id      = aws_vpc.ml_vpc.id
-
-  ingress {
-    description = "SSH from anywhere"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "ml-server-sg"
-  }
+resource "aws_iam_role_policy_attachment" "eks_worker_node" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.eks_node_role.name
 }
 
-# 5. Virtual Server (EC2 Instance) AMI Data Source & Instance
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  owners = ["099720109477"]
+resource "aws_iam_role_policy_attachment" "eks_cni" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.eks_node_role.name
 }
 
-resource "aws_instance" "ml_server" {
-  ami                         = data.aws_ami.ubuntu.id
-  instance_type               = "t3.micro"
-  subnet_id                   = aws_subnet.public.id
-  associate_public_ip_address = true
-  vpc_security_group_ids      = [aws_security_group.ml_sg.id]
-
-  tags = {
-    Name = "ml-learning-server"
-  }
+resource "aws_iam_role_policy_attachment" "eks_registry" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.eks_node_role.name
 }
 
-# 6. Internet Gateway (The bridge to the outside world)
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.ml_vpc.id
+# ==========================================
+# 4. THE KUBERNETES CLUSTER (AWS EKS)
+# ==========================================
+resource "aws_eks_cluster" "ml_cluster" {
+  name     = "ml-production-cluster"
+  role_arn = aws_iam_role.eks_cluster_role.arn
 
-  tags = {
-    Name = "ml-igw"
+  vpc_config {
+    subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
   }
+
+  depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
 }
 
-# 7. Route Table to direct traffic to the Internet Gateway
-resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.ml_vpc.id
+# Node Group (The actual servers inside your cluster)
+resource "aws_eks_node_group" "ml_nodes" {
+  cluster_name    = aws_eks_cluster.ml_cluster.name
+  node_group_name = "ml-node-group"
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
+  # CHANGE THIS: Changed from t3.medium to a Free Tier eligible instance type
+  instance_types = ["t3.micro"] 
+
+  scaling_config {
+    desired_size = 2
+    max_size     = 3
+    min_size     = 1
   }
 
-  tags = {
-    Name = "ml-public-rt"
-  }
-}
-
-# 8. Connect the Route Table to your Public Subnet
-resource "aws_route_table_association" "public_assoc" {
-  subnet_id      = aws_subnet.public.id
-  route_table_id = aws_route_table.public_rt.id
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node,
+    aws_iam_role_policy_attachment.eks_cni,
+    aws_iam_role_policy_attachment.eks_registry,
+  ]
 }
