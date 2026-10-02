@@ -1,24 +1,35 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ml-server-deployment
+  name: mlflow-server-deployment
   labels:
-    app: ml-platform
+    app: mlflow-server
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ml-platform
+      app: mlflow-server
   template:
     metadata:
       labels:
-        app: ml-platform
+        app: mlflow-server
     spec:
       containers:
-      - name: ml-container
-        image: nginx:latest
+      - name: mlflow-container
+        image: ghcr.io/mlflow/mlflow:v2.11.1
+        command:
+          - mlflow
+          - server
+          - --host
+          - "0.0.0.0"
+          - --port
+          - "5000"
+          - --backend-store-uri
+          - sqlite:///mlflow/mlflow.db
+          - --default-artifact-root
+          - s3://ml-model-registry-store-2026/artifacts
         ports:
-        - containerPort: 8080
+        - containerPort: 5000
         resources:
           requests:
             memory: "512Mi"
@@ -29,18 +40,34 @@ spec:
         env:
         - name: AWS_REGION
           value: "us-east-1"
-        - name: MODEL_BUCKET_NAME
-          value: "ml-model-registry-store-2026"
+        volumeMounts:
+        - name: mlflow-db
+          mountPath: /mlflow
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: mlflow-db
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: ml-server-service
+  name: mlflow-server-service
 spec:
   type: LoadBalancer
   selector:
-    app: ml-platform
+    app: mlflow-server
   ports:
   - protocol: TCP
     port: 80
-    targetPort: 8080
+    targetPort: 5000
