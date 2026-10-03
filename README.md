@@ -28,7 +28,7 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 
 ---
 
-## 🚀 Tech Stack
+## Tech Stack
 
 * **Orchestration**: Kubernetes, AWS EKS (`t3.small`)
 * **Tracking Server**: MLflow (`v2.11.1`) running via Gunicorn in Docker
@@ -38,7 +38,7 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 ml_infra/
@@ -58,14 +58,14 @@ ml_infra/
 
 ---
 
-## ⚙️ Key Configuration Highlights
+## Key Configuration Highlights
 
 1. **Kubernetes Health Probes**: Configured liveness and readiness probes to map to the root path (`/`) instead of `/health` to maintain stable zero-downtime deployments without container crash loops.
 2. **Environment Constraints**: Built using Python 3.10 with `mlflow==2.11.1`, pinning `setuptools<74` and `packaging<24` for seamless dependency resolution.
 
 ---
 
-## 🛠️ Getting Started & Deployment
+## Getting Started & Deployment
 
 ### 1. Apply Kubernetes Manifests
 
@@ -105,7 +105,7 @@ python3 register_model.py
 
 ---
 
-## 🌐 Accessing the UI
+## Accessing the UI
 
 Retrieve your external AWS LoadBalancer URL via kubectl:
 
