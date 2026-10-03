@@ -1,5 +1,3 @@
-
-```markdown
 # Production-Grade MLflow Platform on AWS EKS
 
 An enterprise-ready MLOps tracking and model registry platform deployed on **AWS EKS** (Elastic Kubernetes Service), backed by **AWS RDS (PostgreSQL)** for backend metadata storage, and **AWS S3** for secure, scalable artifact storage.
