@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 # ==========================================
-# 1. NETWORKING (Required for Kubernetes)
+# 1. NETWORKING (Required for Kubernetes & RDS)
 # ==========================================
 resource "aws_vpc" "ml_vpc" {
   cidr_block           = "10.0.0.0/16"
@@ -15,19 +15,19 @@ resource "aws_vpc" "ml_vpc" {
 
 # EKS requires at least 2 subnets in DIFFERENT Availability Zones
 resource "aws_subnet" "public_1" {
-  vpc_id            = aws_vpc.ml_vpc.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-east-1a"
+  vpc_id                  = aws_vpc.ml_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "us-east-1a"
   map_public_ip_on_launch = true
-  tags              = { Name = "ml-public-1", "kubernetes.io/role/elb" = "1" }
+  tags                    = { Name = "ml-public-1", "kubernetes.io/role/elb" = "1" }
 }
 
 resource "aws_subnet" "public_2" {
-  vpc_id            = aws_vpc.ml_vpc.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = "us-east-1b"
+  vpc_id                  = aws_vpc.ml_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "us-east-1b"
   map_public_ip_on_launch = true
-  tags              = { Name = "ml-public-2", "kubernetes.io/role/elb" = "1" }
+  tags                    = { Name = "ml-public-2", "kubernetes.io/role/elb" = "1" }
 }
 
 resource "aws_internet_gateway" "gw" {
@@ -64,7 +64,6 @@ resource "aws_s3_bucket" "model_registry" {
 # ==========================================
 # 3. IAM ROLES (Permissions for Kubernetes)
 # ==========================================
-# Role for the EKS Cluster control plane
 resource "aws_iam_role" "eks_cluster_role" {
   name = "ml-eks-cluster-role"
   assume_role_policy = jsonencode({
@@ -86,7 +85,6 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role       = aws_iam_role.eks_cluster_role.name
 }
 
-# Role for the worker nodes (the actual servers running your apps)
 resource "aws_iam_role" "eks_node_role" {
   name = "ml-eks-node-role"
   assume_role_policy = jsonencode({
@@ -132,15 +130,13 @@ resource "aws_eks_cluster" "ml_cluster" {
   depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
 }
 
-# Node Group (The actual servers inside your cluster)
 resource "aws_eks_node_group" "ml_nodes" {
   cluster_name    = aws_eks_cluster.ml_cluster.name
   node_group_name = "ml-node-group"
   node_role_arn   = aws_iam_role.eks_node_role.arn
   subnet_ids      = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
-  # CHANGE THIS: Changed from t3.medium to a Free Tier eligible instance type
-  instance_types = ["t3.micro"] 
+  instance_types = ["t3.small"]
 
   scaling_config {
     desired_size = 2
@@ -153,4 +149,61 @@ resource "aws_eks_node_group" "ml_nodes" {
     aws_iam_role_policy_attachment.eks_cni,
     aws_iam_role_policy_attachment.eks_registry,
   ]
+}
+
+# ==========================================
+# 5. RDS DATABASE (MLflow Backend Store)
+# ==========================================
+resource "aws_db_subnet_group" "ml_db_subnet_group" {
+  name       = "ml-db-subnet-group"
+  subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+
+  tags = {
+    Name = "MLflow DB Subnet Group"
+  }
+}
+
+resource "aws_security_group" "rds_sg" {
+  name        = "ml-rds-security-group"
+  description = "Allow inbound traffic from EKS worker nodes to RDS"
+  vpc_id      = aws_vpc.ml_vpc.id
+
+  ingress {
+    description = "PostgreSQL from VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.ml_vpc.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "ml-rds-sg"
+  }
+}
+
+resource "aws_db_instance" "mlflow_db" {
+  identifier             = "mlflow-db-instance"
+  engine                 = "postgres"
+  engine_version         = "15"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  max_allocated_storage  = 100
+  db_name                = "mlflow"
+  username               = "mlflow_user"
+  password               = "ChangeThisSecurePassword123!"
+  db_subnet_group_name   = aws_db_subnet_group.ml_db_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.rds_sg.id]
+  skip_final_snapshot    = true
+  publicly_accessible    = true
+}
+
+output "rds_endpoint" {
+  value = aws_db_instance.mlflow_db.endpoint
 }

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: mlflow-container
-        image: ghcr.io/mlflow/mlflow:v2.11.1
+        image: ivanovaml/mlflow-aws:v2.11.1
         command:
           - mlflow
           - server
@@ -25,39 +25,38 @@ spec:
           - --port
           - "5000"
           - --backend-store-uri
-          - sqlite:///mlflow/mlflow.db
+          - $(MLFLOW_DB_URI)
           - --default-artifact-root
           - s3://ml-model-registry-store-2026/artifacts
         ports:
         - containerPort: 5000
         resources:
           requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
             memory: "512Mi"
             cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
         env:
         - name: AWS_REGION
           value: "us-east-1"
-        volumeMounts:
-        - name: mlflow-db
-          mountPath: /mlflow
+        - name: MLFLOW_DB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-db-secret
+              key: database-url
         livenessProbe:
           httpGet:
-            path: /health
+            path: /
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
+            path: 
             port: 5000
           initialDelaySeconds: 5
           periodSeconds: 5
-      volumes:
-      - name: mlflow-db
-        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
