@@ -6,11 +6,10 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 
 ## Architecture Overview
 
-
-```
-
+```text
 +-------------------------------------------------------------------+
-|                        AWS Cloud (us-east-1)                      |
+
+|                        AWS Cloud (eu-west-2)                      |
 |                                                                   |
 |   +--------------------+     +---------------------------------+  |
 |   | AWS EKS Cluster    |     | AWS RDS PostgreSQL              |  |
@@ -23,7 +22,6 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 |   | (External Traffic) | --> | (Artifact Storage Root)         |  |
 |   +--------------------+     +---------------------------------+  |
 +-------------------------------------------------------------------+
-
 ```
 
 ---
@@ -34,6 +32,7 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 * **Tracking Server**: MLflow (`v2.11.1`) running via Gunicorn in Docker
 * **Backend Database**: AWS RDS PostgreSQL (stores experiments, runs, parameters, metrics, and registry metadata)
 * **Artifact Store**: Amazon S3 (`ml-model-registry-store-2026`)
+* **CI/CD Automation**: GitHub Actions (Linting, transient background testing, Dockerization, and Amazon ECR pushing)
 * **Language & Tooling**: Python 3.10, Boto3, Docker, kubectl, Terraform
 
 ---
@@ -41,20 +40,41 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 ## Repository Structure
 
 ```text
-ml_infra/
-├── docker/
+.github/
+└── workflows/
+    └── ci-cd.yml                  # Automated AWS CI/CD Pipeline
+docker/
 │   └── Dockerfile                 # Custom MLflow container image
-├── kubernetes/
+kubernetes/
+│   ├── mlflow_db_secret.yaml      # Database connection credentials secret
 │   └── ml_platform.yaml           # Consolidated EKS Deployment & LoadBalancer Service
-├── mlflow/
-│   └── mlflow_db_secret.yaml      # Database connection credentials secret
-├── projects/
+projects/
 │   ├── train_model.py             # SmartHome Energy Predictor training script
 │   └── register_model.py          # Model registration & staging script
-└── terraform/
-    └── main.tf                    # Infrastructure provisioning (EKS, RDS, S3)
-
+terraform/
+│   └── main.tf                    # Infrastructure provisioning (EKS, RDS, S3)
+test_mlflow.py                     # MLflow integration sanity check script
 ```
+
+---
+
+## Automated CI/CD Pipeline
+
+The platform uses an integrated GitHub Actions pipeline (`.github/workflows/ci-cd.yml`) triggered on every push to the `main` branch. 
+
+### Pipeline Workflow States:
+1. **CI Pipeline**: 
+   * Configures Python 3.10 and lints tracking scripts using `flake8`.
+   * Provisions a temporary, localized background MLflow server on port `8080` to safely validate integration code blocks using `pytest test_mlflow.py`.
+2. **CD Pipeline**:
+   * Authenticates securely against AWS infrastructure tools using stored identity repository secrets.
+   * Compiles the tracking engine container using files in `./docker`.
+   * Automatically tags and delivers the image directly to your Amazon ECR private image index (**`nexusbio-sandbox-base`**).
+
+### Required GitHub Actions Secrets:
+* `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`
+* `AWS_REGION` (configured to `eu-west-2`)
+* `ECR_REPOSITORY_NAME` (set to `nexusbio-sandbox-base`)
 
 ---
 
@@ -74,14 +94,12 @@ Deploy the MLflow tracking server and expose it via the AWS LoadBalancer service
 ```bash
 kubectl apply -f kubernetes/mlflow_db_secret.yaml
 kubectl apply -f kubernetes/ml_platform.yaml
-
 ```
 
 Verify that pods are running successfully:
 
 ```bash
 kubectl get pods
-
 ```
 
 ### 2. Train and Log Models
@@ -91,7 +109,6 @@ Run the training script to generate synthetic data, train a `RandomForestRegress
 ```bash
 cd projects/
 python3 train_model.py
-
 ```
 
 ### 3. Register and Stage Models
@@ -100,7 +117,6 @@ Run the registration script to promote your latest run into the MLflow Model Reg
 
 ```bash
 python3 register_model.py
-
 ```
 
 ---
@@ -111,10 +127,6 @@ Retrieve your external AWS LoadBalancer URL via kubectl:
 
 ```bash
 kubectl get svc mlflow-server-service
-
 ```
 
 Open the LoadBalancer endpoint in your browser to view experiments, compare run performance metrics, and manage registered models.
-
-```
-
