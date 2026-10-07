@@ -26,20 +26,15 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m pip install --upgrade pip
+          pip install flake8
+          # Install dependencies from your projects folder if needed
+          if [ -f projects/requirements.txt ]; then pip install -r projects/requirements.txt; fi
 
       - name: Lint with flake8
         run: |
-          pip install flake8
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
-      # Uncomment if you have written automated tests
-      # - name: Run Unit Tests
-      #   run: |
-      #     pip install pytest
-      #     pytest
 
   continuous-delivery:
     name: CD Pipeline (Build, Push & Deploy)
@@ -67,12 +62,20 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: latest
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          # Targets the Dockerfile inside your docker/ directory
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f docker/Dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # Example: Pulling and restarting the app on an EC2 Runner 
-      # alternative: trigger AWS SageMaker Pipelines or ECS tasks here
-      - name: Deploy to Cloud Environment
+      - name: Deploy to AWS EKS
         run: |
-          echo "Deploying the containerized MLOps application..."
-          # Insert your specific AWS deployment trigger script here (e.g. EB, EC2 or SageMaker)
+          echo "Configuring kubectl for EKS cluster..."
+          # Securely authenticate using credentials configured in step 2
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+          
+          echo "Applying Kubernetes manifests..."
+          # Deploying your tracking server platforms directly to the cluster
+          kubectl apply -f mlflow/mlflow_db_secret.yaml
+          kubectl apply -f kubernetes/ml_platform.yaml
+          
+          echo "Rolling out latest container build..."
+          kubectl rollout restart deployment/mlflow-server-deployment
