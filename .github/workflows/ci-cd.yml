@@ -48,7 +48,7 @@ jobs:
           if [ -f test_mlflow.py ]; then pytest test_mlflow.py || true; fi
 
   continuous-delivery:
-    name: CD Pipeline (Build, Push & Deploy)
+    name: CD Pipeline (Build & Push to ECR)
     needs: continuous-integration
     runs-on: ubuntu-latest
 
@@ -59,15 +59,15 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws-secret-access-key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws-region: "${{ secrets.AWS_REGION }}"
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Explicitly targeting your /docker directory containing your custom MLflow tracking server container
+      # This builds your MLflow custom container and securely delivers it to your nexusbio-sandbox-base repository
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -76,17 +76,3 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./docker
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      # Authenticates and deploys directly to your infrastructure platform using your repository's kubernetes manifestations
-      - name: Deploy to AWS EKS Cluster
-        run: |
-          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
-          
-          # Applies your specific platform manifests
-          if [ -d kubernetes ]; then
-            kubectl apply -f kubernetes/mlflow_db_secret.yaml
-            kubectl apply -f kubernetes/ml_platform.yaml
-            
-            # Triggers a rolling update restart to apply your newly pushed container image safely without downtime
-            kubectl rollout restart deployment/mlflow-server -n default || true
-          fi
