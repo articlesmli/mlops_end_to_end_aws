@@ -40,9 +40,12 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 ## Repository Structure
 
 ```text
+
+mlops_end_to_end_aws
+│
 .github/
-└── workflows/
-    └── ci-cd.yml                  # Automated AWS CI/CD Pipeline
+│    └── workflows/
+│       └── ci-cd.yml                  # Automated AWS CI/CD Pipeline
 docker/
 │   └── Dockerfile                 # Custom MLflow container image
 kubernetes/
