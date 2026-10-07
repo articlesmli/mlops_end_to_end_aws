@@ -39,7 +39,7 @@ spec:
             cpu: "500m"
         env:
         - name: AWS_REGION
-          value: "us-east-1"
+          value: "eu-west-2"
         - name: MLFLOW_DB_URI
           valueFrom:
             secretKeyRef:

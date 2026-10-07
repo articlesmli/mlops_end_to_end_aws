@@ -1,7 +1,7 @@
 import mlflow
 from mlflow.tracking import MlflowClient
 
-mlflow.set_tracking_uri("http://a53cd1cd2e3f14de883bb55288390054-251161692.us-east-1.elb.amazonaws.com")
+mlflow.set_tracking_uri("http://a53cd1cd2e3f14de883bb55288390054-251161692.eu-west-2.elb.amazonaws.com")
 client = MlflowClient()
 
 experiment_name = "smarthome-energy-prediction"

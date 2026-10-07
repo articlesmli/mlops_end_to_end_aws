@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
 # Point directly to your AWS Load Balancer MLflow tracking server
-MLFLOW_TRACKING_URI = "http://a53cd1cd2e3f14de883bb55288390054-251161692.us-east-1.elb.amazonaws.com"
+MLFLOW_TRACKING_URI = "http://a53cd1cd2e3f14de883bb55288390054-251161692.eu-west-2.elb.amazonaws.com"
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("smarthome-energy-prediction")
 
