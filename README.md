@@ -43,20 +43,20 @@ An enterprise-ready MLOps tracking and model registry platform deployed on **AWS
 
 mlops_end_to_end_aws
 │
-.github/
-│    └── workflows/
-│       └── ci-cd.yml                  # Automated AWS CI/CD Pipeline
-docker/
-│   └── Dockerfile                 # Custom MLflow container image
-kubernetes/
-│   ├── mlflow_db_secret.yaml      # Database connection credentials secret
-│   └── ml_platform.yaml           # Consolidated EKS Deployment & LoadBalancer Service
-projects/
-│   ├── train_model.py             # SmartHome Energy Predictor training script
-│   └── register_model.py          # Model registration & staging script
-terraform/
-│   └── main.tf                    # Infrastructure provisioning (EKS, RDS, S3)
-test_mlflow.py                     # MLflow integration sanity check script
+├──.github/
+│      └── workflows/
+│             └── ci-cd.yml           # Automated AWS CI/CD Pipeline
+├── docker/
+│      └── Dockerfile                 # Custom MLflow container image
+├── kubernetes/
+│      ├── mlflow_db_secret.yaml      # Database connection credentials secret
+│      └── ml_platform.yaml           # Consolidated EKS Deployment & LoadBalancer Service
+├── projects/
+│      ├── train_model.py             # SmartHome Energy Predictor training script
+│      └── register_model.py          # Model registration & staging script
+├── terraform/
+│      └── main.tf                    # Infrastructure provisioning (EKS, RDS, S3)
+├──test_mlflow.py                     # MLflow integration sanity check script
 ```
 
 ---
