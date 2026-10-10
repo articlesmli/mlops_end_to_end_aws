@@ -7,7 +7,7 @@ on:
 
 jobs:
   # NOTE: AWS deployment is currently disabled due to expired AWS trial/account.
-  # The configuration is kept here for reference; use the Azure pipeline for active deployments.
+  # The configuration is kept here for reference.
   cd-pipeline-aws:
     name: CD Pipeline (Build & Push to ECR)
     runs-on: ubuntu-latest
